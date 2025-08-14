@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 interface ScanOptions {
   acceptAllAdvertisements?: boolean;
@@ -25,7 +25,12 @@ export default function BluetoothScanner() {
   const [deviceName, setDeviceName] = useState('');
   const [deviceNamePrefix, setDeviceNamePrefix] = useState('');
   const [acceptAllAdvertisements, setAcceptAllAdvertisements] = useState(false);
-  const [currentScan, setCurrentScan] = useState<any>(null);
+  const [currentScan, setCurrentScan] = useState<{ active: boolean; stop: () => void } | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const log = useCallback((message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -41,12 +46,12 @@ export default function BluetoothScanner() {
   }, [log]);
 
   const startScan = async () => {
-    if (!navigator.bluetooth) {
+    if (!isClient || !navigator.bluetooth) {
       log('Web Bluetooth API is not available in this browser');
       return;
     }
 
-    let filters: Array<{ name?: string; namePrefix?: string }> = [];
+    const filters: Array<{ name?: string; namePrefix?: string }> = [];
 
     if (deviceName) {
       filters.push({ name: deviceName });
@@ -56,7 +61,7 @@ export default function BluetoothScanner() {
       filters.push({ namePrefix: deviceNamePrefix });
     }
 
-    let options: ScanOptions = {};
+    const options: ScanOptions = {};
     if (acceptAllAdvertisements) {
       options.acceptAllAdvertisements = true;
     } else {
@@ -67,8 +72,7 @@ export default function BluetoothScanner() {
       log('Requesting Bluetooth Scan with options: ' + JSON.stringify(options));
       setIsScanning(true);
       
-      // @ts-ignore - Web Bluetooth API types may not be fully available
-      const scan = await navigator.bluetooth.requestLEScan(options);
+      const scan = await navigator.bluetooth!.requestLEScan(options);
       setCurrentScan(scan);
 
       log('Scan started with:');
@@ -94,8 +98,7 @@ export default function BluetoothScanner() {
         });
       };
 
-      // @ts-ignore
-      navigator.bluetooth.addEventListener('advertisementreceived', handleAdvertisement);
+      navigator.bluetooth!.addEventListener('advertisementreceived', handleAdvertisement);
 
       // Auto-stop scanning after 30 seconds
       setTimeout(() => {
@@ -191,7 +194,7 @@ export default function BluetoothScanner() {
           </button>
         </div>
         
-        {!navigator.bluetooth && (
+        {isClient && !navigator.bluetooth && (
           <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-6">
             <div className="flex">
               <div className="ml-3">
