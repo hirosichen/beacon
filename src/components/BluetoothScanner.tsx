@@ -82,20 +82,88 @@ export default function BluetoothScanner() {
       log(' filters: ' + JSON.stringify(scan.filters));
 
       const handleAdvertisement = (event: AdvertisementEvent) => {
-        log('Advertisement received.');
+        log('━━━ Advertisement received ━━━');
         log('  Device Name: ' + (event.device.name || 'Unknown'));
-        log('  Device ID: ' + event.device.id);
-        log('  RSSI: ' + event.rssi);
-        log('  TX Power: ' + event.txPower);
-        log('  UUIDs: ' + JSON.stringify(event.uuids));
+        log('  Device ID (Chrome Internal): ' + event.device.id);
+        log('  RSSI: ' + (event.rssi !== undefined ? event.rssi + ' dBm' : 'Unknown'));
+        log('  TX Power: ' + (event.txPower !== undefined ? event.txPower + ' dBm' : 'Not provided'));
+        log('  Service UUIDs: ' + (event.uuids?.length ? JSON.stringify(event.uuids) : 'None advertised'));
         
-        event.manufacturerData.forEach((valueDataView, key) => {
-          logDataView('Manufacturer', key, valueDataView);
-        });
+        if (event.manufacturerData.size > 0) {
+          log('  📱 Manufacturer Data:');
+          event.manufacturerData.forEach((valueDataView, key) => {
+            const companyName = getCompanyName(key);
+            log(`    Company: ${companyName} (ID: ${key})`);
+            
+            // Check for iBeacon (Apple Company ID = 76/0x004C)
+            if (key === 76) {
+              const iBeaconData = parseiBeacon(valueDataView);
+              if (iBeaconData) {
+                log('    🎯 iBeacon Detected!');
+                log(`      UUID: ${iBeaconData.uuid}`);
+                log(`      Major: ${iBeaconData.major}`);
+                log(`      Minor: ${iBeaconData.minor}`);
+                log(`      TX Power: ${iBeaconData.txPower} dBm`);
+                return;
+              }
+            }
+            
+            logDataView('    Data', '', valueDataView);
+          });
+        }
         
-        event.serviceData.forEach((valueDataView, key) => {
-          logDataView('Service', key, valueDataView);
-        });
+        if (event.serviceData.size > 0) {
+          log('  🔧 Service Data:');
+          event.serviceData.forEach((valueDataView, key) => {
+            logDataView('    Service', key, valueDataView);
+          });
+        }
+        
+        log(''); // Empty line for readability
+      };
+
+      const getCompanyName = (id: number): string => {
+        const companies: { [key: number]: string } = {
+          6: 'Microsoft Corporation',
+          76: 'Apple, Inc.',
+          224: 'Google',
+          89: 'Nuheara Limited',
+          117: 'Tencent Holdings Ltd.',
+          // Add more as needed
+        };
+        return companies[id] || `Unknown Company (${id})`;
+      };
+
+      const parseiBeacon = (dataView: DataView) => {
+        try {
+          // iBeacon format: [02 15] + [16-byte UUID] + [2-byte Major] + [2-byte Minor] + [1-byte TX Power]
+          if (dataView.byteLength < 23) return null;
+          
+          const type = dataView.getUint8(0);
+          const subType = dataView.getUint8(1);
+          
+          // Check for iBeacon identifier (0x02 0x15)
+          if (type !== 0x02 || subType !== 0x15) return null;
+          
+          // Extract UUID (16 bytes)
+          const uuid = Array.from(new Uint8Array(dataView.buffer, 2, 16))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('')
+            .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+          
+          // Extract Major (2 bytes)
+          const major = dataView.getUint16(18, false); // big-endian
+          
+          // Extract Minor (2 bytes)
+          const minor = dataView.getUint16(20, false); // big-endian
+          
+          // Extract TX Power (1 byte, signed)
+          const txPower = dataView.getInt8(22);
+          
+          return { uuid, major, minor, txPower };
+        } catch (error) {
+          return null;
+        }
       };
 
       navigator.bluetooth!.addEventListener('advertisementreceived', handleAdvertisement);
