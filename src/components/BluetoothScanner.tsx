@@ -127,6 +127,16 @@ export default function BluetoothScanner() {
     setLogs([]);
   };
 
+  const copyAllLogs = async () => {
+    const allLogsText = logs.join('\n');
+    try {
+      await navigator.clipboard.writeText(allLogsText);
+      log('All logs copied to clipboard');
+    } catch (err) {
+      log('Failed to copy logs to clipboard');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="bg-white rounded-lg shadow-lg p-6">
@@ -184,6 +194,14 @@ export default function BluetoothScanner() {
             }`}
           >
             {isScanning ? 'Stop Scanning' : 'Scan for Bluetooth Advertisements'}
+          </button>
+          
+          <button
+            onClick={copyAllLogs}
+            disabled={logs.length === 0}
+            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Copy All Logs
           </button>
           
           <button
